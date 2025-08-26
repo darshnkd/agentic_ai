@@ -1,0 +1,15 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Envs
+venv/
+
+# Streamlit cache
+.streamlit/
+
+# Notebook checkpoints
+.ipynb_checkpoints/

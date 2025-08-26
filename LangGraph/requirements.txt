@@ -3,7 +3,7 @@ langchain
 ipython
 langchain_openai
 langchain_community
-dotenv
+python-dotenv
 typing
 chromadb
 langchain_chroma
@@ -13,3 +13,5 @@ PyMuPDF
 pypdf
 langchain-mistralai
 mistralai
+streamlit
+pandas

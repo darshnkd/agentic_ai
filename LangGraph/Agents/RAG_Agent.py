@@ -13,6 +13,7 @@ from typing import TypedDict, Annotated, Sequence
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, ToolMessage, AIMessage
 from operator import add as add_messages
 from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
@@ -24,13 +25,78 @@ import csv
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(dotenv_path=os.path.join(SCRIPT_DIR, ".env"))
 
-llm = ChatMistralAI(
-    model="mistral-large-latest", temperature = 0)
+# Initialize LLM and embeddings with fallback logic
+def initialize_models():
+    """Initialize LLM and embeddings with OpenAI as primary, Mistral AI as fallback."""
+    llm = None
+    embeddings = None
+    model_provider = "Unknown"
+    
+    # Try OpenAI first
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if openai_api_key:
+        try:
+            print("🔍 Testing OpenAI API connection...")
+            llm = ChatOpenAI(
+                model="gpt-4o-mini",  # You can change this to gpt-4o or gpt-3.5-turbo
+                temperature=0,
+                api_key=openai_api_key
+            )
+            embeddings = OpenAIEmbeddings(
+                model="text-embedding-3-small",  # You can change this to text-embedding-3-large
+                api_key=openai_api_key
+            )
+            
+            # Test the connection
+            test_messages = [HumanMessage(content="Hello, this is a test message.")]
+            response = llm.invoke(test_messages)
+            print("✅ OpenAI API connection successful!")
+            model_provider = "OpenAI"
+            
+        except Exception as e:
+            print(f"❌ OpenAI API connection failed: {str(e)}")
+            print("🔄 Falling back to Mistral AI...")
+            llm = None
+            embeddings = None
+    
+    # Fallback to Mistral AI
+    if not llm or not embeddings:
+        mistral_api_key = os.getenv("MISTRAL_API_KEY")
+        if mistral_api_key:
+            try:
+                print("🔍 Testing Mistral AI API connection...")
+                llm = ChatMistralAI(
+                    model="mistral-large-latest",
+                    temperature=0,
+                    api_key=mistral_api_key
+                )
+                embeddings = MistralAIEmbeddings(
+                    model="mistral-embed",
+                    api_key=mistral_api_key
+                )
+                
+                # Test the connection
+                test_messages = [HumanMessage(content="Hello, this is a test message.")]
+                response = llm.invoke(test_messages)
+                print("✅ Mistral AI API connection successful!")
+                model_provider = "Mistral AI"
+                
+            except Exception as e:
+                print(f"❌ Mistral AI API connection failed: {str(e)}")
+                raise Exception("Both OpenAI and Mistral AI API connections failed. Please check your API keys and try again.")
+        else:
+            raise Exception("No API keys found. Please set either OPENAI_API_KEY or MISTRAL_API_KEY in your .env file.")
+    
+    return llm, embeddings, model_provider
 
-# Our Embedding Model - has to also be compatible with the LLM
-embeddings = MistralAIEmbeddings(
-    model="mistral-embed",
-)
+# Initialize models with fallback
+try:
+    llm, embeddings, model_provider = initialize_models()
+    print(f"🚀 Using {model_provider} for LLM and embeddings")
+except Exception as e:
+    print(f"❌ Failed to initialize models: {e}")
+    print("Please check your .env file and API keys.")
+    exit(1)
 
 
 doc_path = os.path.join(SCRIPT_DIR, "Medical_Document_Input.pdf")  # Default relative to this file
@@ -248,8 +314,24 @@ def answer_with_context(query: str, context: str) -> str:
     try:
         resp = llm.invoke(messages)
         return resp.content
-    except Exception:
-        return "I encountered an error while answering with the retrieved context."
+    except Exception as e:
+        print(f"DEBUG: Error in answer_with_context: {str(e)}")
+        print(f"DEBUG: Error type: {type(e).__name__}")
+        # Check for specific error types
+        if "api_key" in str(e).lower() or "authentication" in str(e).lower():
+            if model_provider == "OpenAI":
+                return "Authentication error: Please check your OpenAI API key in the .env file."
+            else:
+                return "Authentication error: Please check your Mistral AI API key in the .env file."
+        elif "rate_limit" in str(e).lower() or "429" in str(e):
+            return "Rate limit exceeded: Please wait a moment before trying again."
+        elif "quota" in str(e).lower():
+            if model_provider == "OpenAI":
+                return "API quota exceeded: Please check your OpenAI account limits."
+            else:
+                return "API quota exceeded: Please check your Mistral AI account limits."
+        else:
+            return f"Error while processing your request: {str(e)}"
 
 
 graph = StateGraph(AgentState)
@@ -267,8 +349,53 @@ graph.set_entry_point("llm")
 rag_agent = graph.compile()
 
 
+def test_api_connection():
+    """Test the API connection before running the main agent."""
+    print(f"Testing {model_provider} API connection...")
+    try:
+        # Simple test message
+        test_messages = [HumanMessage(content="Hello, this is a test message.")]
+        response = llm.invoke(test_messages)
+        print("✅ API connection successful!")
+        print(f"Test response: {response.content[:100]}...")
+        return True
+    except Exception as e:
+        print(f"❌ API connection failed: {str(e)}")
+        print(f"Error type: {type(e).__name__}")
+        
+        # Provide specific guidance based on error type
+        if "api_key" in str(e).lower() or "authentication" in str(e).lower():
+            print(f"\n🔑 AUTHENTICATION ERROR:")
+            if model_provider == "OpenAI":
+                print("Please check your OPENAI_API_KEY in the .env file")
+            else:
+                print("Please check your MISTRAL_API_KEY in the .env file")
+        elif "rate_limit" in str(e).lower() or "429" in str(e):
+            print("\n⏱️ RATE LIMIT ERROR:")
+            print("Please wait a moment and try again")
+        elif "quota" in str(e).lower():
+            print("\n💰 QUOTA ERROR:")
+            if model_provider == "OpenAI":
+                print("Please check your OpenAI account limits")
+            else:
+                print("Please check your Mistral AI account limits")
+        else:
+            print("\n❓ UNKNOWN ERROR:")
+            print("Please check your internet connection and try again")
+        
+        return False
+
+
 def running_agent():
     print("\n=== MEDICAL DOCUMENT ASSISTANT AGENT===")
+    
+    # Test API connection first
+    if not test_api_connection():
+        print("\n❌ Cannot proceed without a working API connection.")
+        print("Please fix the issue above and try again.")
+        return
+    
+    print("\n🚀 Starting the agent...")
     
     while True:
         user_input = input("\nWhat is your question: ")

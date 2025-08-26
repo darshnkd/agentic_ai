@@ -1,0 +1,38 @@
+# Medical Document Assistant - Quick Info
+
+## Quick Start
+```bash
+cd LangGraph/Agents
+
+# 1. Install dependencies (if needed)
+python install_deps.py     # Install all required packages
+
+# 2. Set up API keys
+python setup_env.py        # Set up API keys
+
+# 3. Choose your interface:
+
+# Command line interface:
+python RAG_Agent.py
+
+# Beautiful web UI (Recommended):
+# Option A: Use launcher scripts (Recommended)
+./run_streamlit.sh          # Mac/Linux
+
+# Option B: Manual launch
+source venv/bin/activate    # Mac/Linux
+streamlit run streamlit_app.py
+```
+
+## Setup
+- See SETUP.md for detailed instructions
+- Create .env file with your API keys
+- Supports OpenAI + Mistral AI fallback
+
+## Features
+- RAG agent for medical documents
+- PDF, DOCX, SOAP, CSV support
+- Automatic API fallback
+- ChromaDB vector storage
+- 🎨 Beautiful Streamlit web interface
+- 💬 ChatGPT-like chat experience
