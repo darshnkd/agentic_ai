@@ -165,4 +165,4 @@ pip install -r LangGraph/requirements.txt
 
 ---
 
-**🎯 Goal**: Create a clean, maintainable RAG agent that can seamlessly switch between AI providers for maximum reliability and future flexibility.
+**🎯 Goal**: Create a clean, maintainable RAG agent that can seamlessly switch between AI providers for maximum reliability and future flexibility to analyze the medical documents.
